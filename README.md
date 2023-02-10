@@ -3,10 +3,20 @@ Single Node OpenShift deployment on AWS
 
 # Prerequisites
 
+## CLI Tools
+
 - The following cli tools must be installed and available in PATH
     - aws
     - jq
     - terraform
+
+## DNS Zone
+
+- A domain needs to be configured in Route53 for use by the cluster. Instructions [here](https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/MigratingDNS.html), or search for instructions for your domain hosting service.
+
+## Quota
+
+- The target region must have quota available for an additional VPC with 1 elastic IP and a NAT Gateway.
 
 # Instructions
 
