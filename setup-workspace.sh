@@ -384,7 +384,7 @@ cat "${TERRAFORM_DIR}/terraform.tfvars-template" | \
   > "${INSTALL_DIR}/terraform.tfvars"
 
 if [[ -n $SSH_KEY ]]; then
-  echo $'\n'"ssh_key=\"${SSH_KEY}\"" >> "$INSTALL_DIR/terraform.tfvars"
+  echo $'\n'"pub_ssh_key=\"${SSH_KEY}\"" >> "$INSTALL_DIR/terraform.tfvars"
 fi
 
 if [[ $CREATE_INGRESS == "N" ]]; then
