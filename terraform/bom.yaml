@@ -1,0 +1,85 @@
+apiVersion: cloud.ibm.com/v1alpha1
+kind: BillOfMaterial
+metadata:
+  name: 100-aws-sno-vpc
+spec:
+  version: v1.0.0
+  modules:
+
+# VPC
+    - name: aws-vpc
+      alias: vpc
+      variables:
+      - name: internal_cidr
+        value: 10.0.0.0/20  
+
+# Internet gateway
+    - name: aws-internet-gateway
+      alias: igw        
+
+# Public subnet            
+    - name: aws-vpc-subnets
+      alias: public_subnet
+      dependencies:
+        - name: gateways
+          ref: igw
+      variables:
+      - name: label
+        value: public 
+      - name: subnet_cidrs
+        value:
+          - 10.0.1.0/24
+
+#NAT Gateway
+    - name: aws-nat-gateway
+      alias: ngw
+      dependencies:
+        - name: aws-vpc-subnets
+          ref: public_subnet
+      variables:
+        - name : connectivity_type
+          value: public   
+        - name : _count
+          value: 1                   
+
+#Worker Subnet - Private
+    - name: aws-vpc-subnets
+      alias: private_subnet
+      dependencies:
+        - name: gateways
+          ref: ngw
+      variables:
+      - name: label
+        value: private
+      - name: subnet_cidrs
+        value:
+          - 10.0.4.0/24
+
+# Cluster
+    - name: aws-ocp-sno
+      alias: cluster
+      dependencies:
+        - name: vpc
+          ref: vpc
+        - name: private-subnet
+          ref: private_subnet
+        - name: public-subnet
+          ref: public_subnet
+                                        
+  variables:
+    - name: provision
+      value: true
+      scope: global    
+    - name: name_prefix
+      scope: global
+      required: true
+      important: true
+    - name: resource_group_name
+      scope: global      
+    - name: region
+      value: ap-south-1
+      scope: global
+    - name: access_key
+      scope: global
+    - name: secret_key
+      scope: global
