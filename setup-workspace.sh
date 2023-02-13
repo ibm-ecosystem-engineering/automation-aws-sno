@@ -3,6 +3,7 @@
 WORK_DIR="$(pwd)"
 INSTALL_DIR="${WORK_DIR}/install"
 TERRAFORM_DIR="${WORK_DIR}/terraform"
+TF_EXISTING_VPC="${WORK_DIR}/tf-existing-vpc"
 BIN_DIR="binaries"
 BINARY_DIR="${INSTALL_DIR}/${BIN_DIR}"
 INTERACT=1
@@ -20,6 +21,7 @@ DEFAULT_REGION="ap-southeast-2"
 DEFAULT_OCP_VERSION="4.10"
 DEFAULT_INGRESS="Y"
 DEFAULT_PUBLIC="Y"
+DEFAULT_CREATE_VPC="Y"
 
 # Function to display menu
 function menu() {
@@ -159,7 +161,7 @@ if [[ $INTERACT ]]; then
   echo 
   while [[ -z $SSH_INPUT ]]; do
     echo
-    echo -n -e "Enter Public SSH Key for Node Access. Leave blank to create new key. [\"\"]: "
+    echo -n -e "Enter a public SSH Key for Node Access post installation. Leave blank to create new key. [\"\"]: "
     read input
 
     if [[ -n $input ]]; then
@@ -323,6 +325,59 @@ if [[ $INTERACT ]]; then
     fi
   done
 
+  # Create VNet?
+  echo 
+  while [[ -z $CREATE_VPC ]]; do
+    echo 
+    echo -n -e "Create a new VPC [$DEFAULT_CREATE_VPC]: "
+    read input
+
+    if [[ -z $input ]] || [[ "$(echo ${input:0:1} | tr '[:lower:]' '[:upper:]')" == "$DEFAULT_CREATE_VPC" ]]; then
+      CREATE_VPC="$DEFAULT_CREATE_VPC"
+    elif [[ "$(echo ${input:0:1} | tr '[:lower:]' '[:upper:]' )" != "$DEFAULT_CREATE_VPC" ]]; then
+      CREATE_VPC=$(echo ${input:0:1} | tr '[:lower:]' '[:upper:]')
+    else
+      echo "Incorrect entry. Please try again."
+    fi
+  done
+
+  # Get existing VPC details 
+  if [[ $CREATE_VPC = "N" ]]; then
+    # Get VPC
+    echo
+    read -r -d '' -a VPCS < <(aws ec2 describe-vpcs | jq -r '.Vpcs[].VpcId')
+    PS3="Select the VPC for selected region: "
+    VPC_ID=$(menu "${VPCS[@]}")
+
+    # Get CIDR Block for selected VPC
+    VPC_CIDR=$(aws ec2 describe-vpcs | jq -r ".Vpcs[] | select(.VpcId == \"$VPC_ID\") | .CidrBlock")
+
+    # Get private subnet
+    echo
+    read -r -d '' -a SUBNETS < <(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$VPC_ID" | jq -r '.Subnets[].Tags[] | select(.Key == "Name") | .Value')
+    PS3="Select private subnet: "
+    PRIVATE_SUBNET_NAME=$(menu "${SUBNETS[@]}")
+    PRIVATE_SUBNET_ID=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$VPC_ID" | jq -r ".Subnets[] | select(.Tags[].Value == \"$PRIVATE_SUBNET_NAME\") | .SubnetId")
+
+    # Get public subnet
+    if [[ $CREATE_PUBLIC == "Y" ]]; then
+      echo
+      while [[ -z $PUBLIC_SUBNET_NAME ]]; do
+        read -r -d '' -a SUBNETS < <(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$VPC_ID" | jq -r '.Subnets[].Tags[] | select(.Key == "Name") | .Value')
+        PS3="Select public subnet: "
+        SELECTED_SUBNET=$(menu "${SUBNETS[@]}")
+        if [[ $SELECTED_SUBNET == $PRIVATE_SUBNET_NAME ]]; then
+          echo "Subnet $SELECTED_SUBNET is already selected as private subnet. Please select another."
+          PUBLIC_SUBNET_NAME=""
+        else
+          PUBLIC_SUBNET_NAME=$SELECTED_SUBNET
+        fi
+      done
+      PUBLIC_SUBNET_ID=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$VPC_ID" | jq -r ".Subnets[] | select(.Tags[].Value == \"$PUBLIC_SUBNET_NAME\") | .SubnetId")
+    fi
+
+  fi
+
   echo 
   echo "Setting up workspace with the following parameters:"
   echo "Name Prefix                  = $NAME_PREFIX"
@@ -350,6 +405,16 @@ if [[ $INTERACT ]]; then
   echo "Volume Size                  = $VOL_SIZE"
   echo "Volume Type                  = $VOL_TYPE"
   echo "Volume IOPS                  = $VOL_IOPS"
+  if [[ $CREATE_VPC == "Y" ]]; then
+    echo "Create new VPC               = Y"
+  else
+    echo "Existing VPC Id              = $VPC_ID"
+    echo "Existing VPC CIDR            = $VPC_CIDR"
+    echo "Existing Private Subnet      = $PRIVATE_SUBNET_ID ($PRIVATE_SUBNET_NAME)"
+    if [[ $CREATE_PUBLIC == "Y" ]]; then
+      echo "Existing Public Subnet       = $PUBLIC_SUBNET_ID ($PUBLIC_SUBNET_NAME)"
+    fi
+  fi
 
   echo
   echo -n -e "Configure workspace for these parameters? [Y]: "
@@ -361,27 +426,58 @@ if [[ $INTERACT ]]; then
   fi
 fi
 
-# copy files to install directory
-echo -n "Copying terraform files to work directory ...."
-mkdir -p $INSTALL_DIR
-cp ${TERRAFORM_DIR}/*.tf ${INSTALL_DIR}
-echo "Done"
+if [[ $CREATE_VPC == "Y" ]]; then
+  # copy files to install directory
+  echo -n "Copying terraform files to workspace ...."
+  mkdir -p $INSTALL_DIR
+  cp ${TERRAFORM_DIR}/*.tf ${INSTALL_DIR}
+  echo "Done"
 
-# Setup terraform.tfvars
-echo -n "Creating terraform.tfvars in work directory ...."
+  # Setup terraform.tfvars
+  echo -n "Creating terraform.tfvars in workspace ...."
 
-cat "${TERRAFORM_DIR}/terraform.tfvars-template" | \
-  sed "s/NAME_PREFIX/$NAME_PREFIX/g" | \
-  sed "s/REGION/$REGION/g" | \
-  sed "s/RESOURCE_GROUP/$RESOURCE_GROUP/g" | \
-  sed "s/DOMAIN/$DOMAIN/g" | \
-  sed "s/NODE_TYPE/$NODE_TYPE/g" | \
-  sed "s/OPENSHIFT_VERSION/$OPENSHIFT_VERSION/g" | \
-  sed "s/VOLUME_SIZE/$VOL_SIZE/g" | \
-  sed "s/VOLUME_TYPE/$VOL_TYPE/g" | \
-  sed "s/VOLUME_IOPS/$VOL_IOPS/g" | \
-  sed "s/BIN_DIR/$BIN_DIR/g" \
-  > "${INSTALL_DIR}/terraform.tfvars"
+  cat "${TERRAFORM_DIR}/terraform.tfvars-template" | \
+    sed "s/NAME_PREFIX/$NAME_PREFIX/g" | \
+    sed "s/REGION/$REGION/g" | \
+    sed "s/RESOURCE_GROUP/$RESOURCE_GROUP/g" | \
+    sed "s/DOMAIN/$DOMAIN/g" | \
+    sed "s/NODE_TYPE/$NODE_TYPE/g" | \
+    sed "s/OPENSHIFT_VERSION/$OPENSHIFT_VERSION/g" | \
+    sed "s/VOLUME_SIZE/$VOL_SIZE/g" | \
+    sed "s/VOLUME_TYPE/$VOL_TYPE/g" | \
+    sed "s/VOLUME_IOPS/$VOL_IOPS/g" | \
+    sed "s/BIN_DIR/$BIN_DIR/g" \
+    > "${INSTALL_DIR}/terraform.tfvars"
+else
+  # Copy files to install directory
+  echo -n "Copying terraform files to workspace ...."
+  mkdir -p $INSTALL_DIR
+  cp ${TF_EXISTING_VPC}/*.tf ${INSTALL_DIR}
+  echo "Done"
+
+  # Setup terraform.tfvars
+  echo -n "Creating terraform.tfvars in workspace ...."
+
+  cat "${TF_EXISTING_VPC}/terraform.tfvars-template" | \
+    sed "s/NAME_PREFIX/$NAME_PREFIX/g" | \
+    sed "s/REGION/$REGION/g" | \
+    sed "s/RESOURCE_GROUP/$RESOURCE_GROUP/g" | \
+    sed "s/DOMAIN/$DOMAIN/g" | \
+    sed "s/NODE_TYPE/$NODE_TYPE/g" | \
+    sed "s/OPENSHIFT_VERSION/$OPENSHIFT_VERSION/g" | \
+    sed "s/VOLUME_SIZE/$VOL_SIZE/g" | \
+    sed "s/VOLUME_TYPE/$VOL_TYPE/g" | \
+    sed "s/VOLUME_IOPS/$VOL_IOPS/g" | \
+    sed "s/BIN_DIR/$BIN_DIR/g" | \
+    sed "s/PRIVATE_SUBNET_ID/$PRIVATE_SUBNET_ID/g" \
+    > "${INSTALL_DIR}/terraform.tfvars"
+
+    echo $'\n'"vpc_cidr=\"${VPC_CIDR}\"" >> $INSTALL_DIR/terraform.tfvars
+
+    if [[ $CREATE_PUBLIC == "Y" ]]; then
+      echo $'\n'"public_subnet_id=\"${PUBLIC_SUBNET_ID}\"" >> "$INSTALL_DIR/terraform.tfvars"
+    fi
+fi
 
 if [[ -n $SSH_KEY ]]; then
   echo $'\n'"pub_ssh_key=\"${SSH_KEY}\"" >> "$INSTALL_DIR/terraform.tfvars"
@@ -403,9 +499,11 @@ read input
 
 if [[ -n $input ]] && [[ $(echo ${input:0:1} | tr '[:lower:]' '[:upper:]') != "Y" ]]; then
   echo "Exiting build. To manually build do the following:"
-  echo "   $ cd ./${INSTALL_DIR}"
-  echo "   $ export TF_VAR_access_key=\"<AWS_Access_Key>\""
-  echo "   $ export TF_VAR_secret_key=\"<AWS_Secret_Access_Key>\""
+  echo "   $ cd ${INSTALL_DIR}"
+  echo "   $ export TF_VAR_access_key=\'<AWS_Access_Key>\'"
+  echo "   $ export TF_VAR_secret_key=\'<AWS_Secret_Access_Key>\'"
+  echo "   $ export TF_VAR_pull_secret=\'<Red_Hat_Pull_Secret>\'"
+  echo "   (Note use of \' vs \" to ensure quotes in pull secret are maintained)"
   echo "   $ terraform init"
   echo "   $ terrform apply"
   exit 0;
@@ -462,5 +560,4 @@ terraform init
 echo "Done with terraform initialization"
 
 echo "Applying terraform infrastructure as code ..."
-#terraform plan
 terraform apply -auto-approve

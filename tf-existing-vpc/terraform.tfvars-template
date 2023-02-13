@@ -1,0 +1,48 @@
+
+# Prefix for resource names
+name_prefix="NAME_PREFIX"
+
+# AWS region into which to deploy resources
+region="REGION"
+
+# Name of the ResourceGroup tag for each resource
+resource_group_name="RESOURCE_GROUP"
+
+# Base domain name
+base_domain_name="DOMAIN"
+
+# SSH Key for access to openshift node
+#pub_ssh_key=SSH_KEY
+
+# AWS EC2 Node Type
+node_type="NODE_TYPE"
+
+# OpenShift version
+openshift_version="OPENSHIFT_VERSION"
+
+# Volume size for disk attached to node
+volume_size="VOLUME_SIZE"
+
+# Volume type for disk attached to node
+volume_type="VOLUME_TYPE"
+
+# Volume IOPS for disk attached to node
+volume_iops="VOLUME_IOPS"
+
+# offset directory to install binaries
+bin_dir="BIN_DIR"
+
+# VPC CIDR for existing VPC
+#vpc_cidr="VPC_CIDR"
+
+# Private subnet id
+private_subnet_id="PRIVATE_SUBNET_ID"
+
+# Public subnet id
+#public_subnet_id="PUBLIC_SUBNET_ID"
+
+# Update ingress certificates (Uncomment the below to *not* change the default ingress certificates)
+#update_ingress_cert=false
+
+# Create public endpoint (Uncomment the below to *not* create a public endpoint for the cluster)
+#private=true
