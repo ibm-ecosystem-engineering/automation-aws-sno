@@ -1,9 +1,9 @@
 module "cluster" {
   source = "github.com/cloud-native-toolkit/terraform-aws-ocp-sno?ref=v1.0.1"
 
-  private_subnet          = module.private_subnet.ids[0]
-  public_subnet           = module.public_subnet.ids[0]
-  vpc_cidr                = module.vpc.vpc_cidr
+  private_subnet          = var.private_subnet_id
+  public_subnet           = var.public_subnet_id
+  vpc_cidr                = var.vpc_cidr
 
   debug                   = false
   install_offset          = "openshift"

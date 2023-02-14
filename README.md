@@ -43,3 +43,11 @@ It is possible to set the environment variables for the following prior to runni
 - AWS_ACCESS_KEY_ID
 - AWS_SECRET_ACCESS_KEY
 - TF_VAR_pull_secret
+
+# Use of existing VPC
+
+If using an existing VPC, the minimum requirement is one private subnet. The private subnet must be able to route to the internet to retrieve images from Red Hat. For example, via an NAT gateway attached to a public subnet, or another VPC with VPC peering.
+
+If a public endpoint for the cluster is required, an additional public subnet with an internet gateway is required.
+
+If using Network Security Groups or NetworkACLs, ensure that ports are open to allow the build and run of the cluster to occur. Refer to Red Hat documentation for details.
