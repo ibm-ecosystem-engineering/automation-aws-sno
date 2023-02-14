@@ -1,5 +1,5 @@
 module "cluster" {
-  source = "github.com/cloud-native-toolkit/terraform-aws-ocp-sno?ref=v1.0.0"
+  source = "github.com/cloud-native-toolkit/terraform-aws-ocp-sno?ref=v1.0.1"
 
   private_subnet          = var.private_subnet_id
   public_subnet           = var.public_subnet_id
